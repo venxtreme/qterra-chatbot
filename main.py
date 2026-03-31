@@ -82,7 +82,7 @@ if google_creds_json:
         tmp_path = tmp.name
     creds = ServiceAccountCredentials.from_json_keyfile_name(tmp_path, scope)
 else:
-    creds = ServiceAccountCredentials.from_json_keyfile_name('chatbot-490407-0ed601f00f54.json', scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name('google_credentials.json', scope)
 
 client = gspread.authorize(creds)
 spreadsheet_id = os.environ.get("SPREADSHEET_ID")
