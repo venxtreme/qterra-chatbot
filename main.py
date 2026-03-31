@@ -70,7 +70,7 @@ app.add_middleware(
 api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
     raise RuntimeError("GEMINI_API_KEY is not set in .env")
-gemini_client = genai.Client(api_key=api_key)
+gemini_client = genai.Client(api_key=api_key, http_options={"api_version": "v1"})
 
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
