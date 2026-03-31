@@ -1,0 +1,10 @@
+.env
+venv/
+__pycache__/
+*.pyc
+google_credentials.json
+chatbot-490407-0ed601f00f54.json
+verify_setup.py
+.git
+Dockerfile
+.dockerignore
