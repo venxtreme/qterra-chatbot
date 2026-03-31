@@ -70,7 +70,7 @@ app.add_middleware(
 api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
     raise RuntimeError("GEMINI_API_KEY is not set in .env")
-gemini_client = genai.Client(api_key=api_key, http_options={"api_version": "v1"})
+gemini_client = genai.Client(api_key=api_key)
 
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
@@ -232,7 +232,7 @@ IMPORTANT RULES:
 - The JSON block must always appear at the very end of your message and only once.
 """
 
-GEMINI_MODEL = 'gemini-1.5-flash'
+GEMINI_MODEL = 'gemini-flash-latest'
 
 
 def determine_properties(messages_content: str):
