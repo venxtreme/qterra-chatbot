@@ -232,7 +232,7 @@ IMPORTANT RULES:
 - The JSON block must always appear at the very end of your message and only once.
 """
 
-GEMINI_MODEL = 'gemini-2.0-flash'
+GEMINI_MODEL = 'gemini-1.5-flash'
 
 
 def determine_properties(messages_content: str):
