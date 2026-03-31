@@ -9,6 +9,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from typing import List, Optional
 import os
 import json
+import traceback
 from datetime import datetime
 import openpyxl
 
@@ -231,7 +232,7 @@ IMPORTANT RULES:
 - The JSON block must always appear at the very end of your message and only once.
 """
 
-GEMINI_MODEL = 'gemini-1.5-flash'
+GEMINI_MODEL = 'gemini-2.0-flash'
 
 
 def determine_properties(messages_content: str):
@@ -368,6 +369,7 @@ async def chat_endpoint(req: ChatRequest):
         return {"response": response_text}
 
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
