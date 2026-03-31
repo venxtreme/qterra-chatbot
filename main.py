@@ -2,7 +2,8 @@ from fastapi import FastAPI, APIRouter, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from typing import List, Optional
@@ -68,7 +69,7 @@ app.add_middleware(
 api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
     raise RuntimeError("GEMINI_API_KEY is not set in .env")
-genai.configure(api_key=api_key)
+gemini_client = genai.Client(api_key=api_key)
 
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
@@ -230,7 +231,7 @@ IMPORTANT RULES:
 - The JSON block must always appear at the very end of your message and only once.
 """
 
-model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=SYSTEM_PROMPT)
+GEMINI_MODEL = 'gemini-1.5-flash'
 
 
 def determine_properties(messages_content: str):
@@ -274,10 +275,15 @@ async def chat_endpoint(req: ChatRequest):
         history = []
         full_conversation = ""
         for m in req.messages[:-1]:
-            history.append({"role": "model" if m.role == "assistant" else "user", "parts": [m.content]})
+            role = "model" if m.role == "assistant" else "user"
+            history.append(types.Content(role=role, parts=[types.Part(text=m.content)]))
             full_conversation += f"{m.role}: {m.content}\n"
 
-        chat = model.start_chat(history=history)
+        chat = gemini_client.chats.create(
+            model=GEMINI_MODEL,
+            config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
+            history=history
+        )
 
         last_msg = req.messages[-1].content
         full_conversation += f"user: {last_msg}\n"
