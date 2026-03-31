@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qterra Property Management - Chat</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Main CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    
+    <!-- Background elements for aesthetic -->
+    <div class="bg-shape shape-1"></div>
+    <div class="bg-shape shape-2"></div>
+    
+    <div class="app-container">
+        <!-- Chatbot Widget Header -->
+        <header class="widget-header">
+            <div class="header-content">
+                <div class="logo-container">
+                    <!-- Qterra placeholder logo/icon -->
+                    <div class="brand-icon">Q</div>
+                </div>
+                <div class="brand-text">
+                    <h1>Quinn</h1>
+                    <p class="status">
+                        <span class="status-dot"></span>
+                        Online & Ready to Help
+                    </p>
+                </div>
+            </div>
+            <button class="menu-btn" aria-label="Menu">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
+            </button>
+        </header>
+
+        <!-- Chat Area -->
+        <main class="chat-area" id="chat-stream">
+            <!-- Messages go here -->
+            <div class="message-wrapper ai-message">
+                <div class="message-bubble">
+                    <p>Hi, I'm Quinn! How can I help you today?</p>
+                </div>
+                <span class="message-time">Just now</span>
+            </div>
+        </main>
+
+        <!-- Input Area -->
+        <footer class="input-area">
+            <div class="input-container">
+                <input type="text" id="chat-input" placeholder="Type your message here..." autocomplete="off">
+                <button id="send-btn" class="send-btn" aria-label="Send message">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </div>
+        </footer>
+    </div>
+    
+    <!-- Main JS -->
+    <script src="app.js"></script>
+</body>
+</html>
