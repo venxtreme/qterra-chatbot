@@ -2410,4 +2410,4 @@ def search_properties(location: str = None, property_type: str = None):
                    or location.lower() in p['city'].lower()]
     if property_type:
         results = [p for p in results if property_type.lower() in p['type'].lower()]
-    return results[-3:]  # Return 3 latest matches
+    return results[-2:]  # Return 2 latest matches

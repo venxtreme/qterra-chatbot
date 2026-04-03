@@ -26,14 +26,11 @@ def load_leased_properties(filepath: str = "Leased properties dataset Updated.xl
         for row in ws.iter_rows(min_row=2, values_only=True):
             if any(row):
                 leased.append({
-                    "status": row[0] or "",
-                    "address": row[1] or "",
-                    "property_type": row[2] or "",
-                    "beds": row[3] or "",
-                    "baths": row[4] or "",
-                    "sqft": row[5] or "",
-                    "price": row[6] or "",
-                    "url": row[7] or "",
+                    "address": row[0] if len(row) > 0 and row[0] else "",
+                    "price": row[1] if len(row) > 1 and row[1] else "",
+                    "status": row[2] if len(row) > 2 and row[2] else "",
+                    "property_type": row[3] if len(row) > 3 and row[3] else "",
+                    "url": row[4] if len(row) > 4 and row[4] else "",
                 })
     except Exception as e:
         print(f"WARNING: Could not load leased properties: {e}")
@@ -150,7 +147,7 @@ After Name + Phone, collect the following ONE AT A TIME:
 5. Number of occupants who will be living in the unit.
 
 AFTER collecting all 5 items:
-- Recommend up to 3 matching available properties from the database (provided in context). Always include the full URL link for each.
+- Recommend up to 2 matching available properties from the database (provided in context). Always include the full URL link for each.
 - Let them know they can apply here: https://forms.zohopublic.com/quettapropertymanagement/form/RentalApplication/formperma/-nWZTD2qFkCIqpQG-9edv2W5AHgXpfi8DUFlR_k7SNg
 - Thank them warmly.
 
@@ -232,7 +229,7 @@ IMPORTANT RULES:
 - The JSON block must always appear at the very end of your message and only once.
 """
 
-GEMINI_MODEL = 'gemini-flash-latest'
+GEMINI_MODEL = 'gemini-2.5-flash'
 
 
 def determine_properties(messages_content: str):
@@ -306,7 +303,7 @@ async def chat_endpoint(req: ChatRequest):
         if is_tenant_convo:
             properties, location, property_type = determine_properties(full_conversation)
             if properties and location and property_type:
-                context = "\n[SYSTEM: The user is a Tenant. Here are up to 3 matching available properties. Include each property's full URL link in your message:\n"
+                context = "\n[SYSTEM: The user is a Tenant. Here are up to 2 matching available properties. Include each property's full URL link in your message:\n"
                 for p in properties:
                     price = f" | ${p.get('price', 'N/A')}/mo" if p.get('price') else ""
                     beds = f" | {p.get('beds', '')} bed" if p.get('beds') else ""
