@@ -227,6 +227,7 @@ IMPORTANT RULES:
 - Do NOT ask all questions at once. ONE question per response.
 - Always be warm, patient, and encouraging.
 - The JSON block must always appear at the very end of your message and only once.
+- CRITICAL URL RULE: When sharing property URLs, you MUST copy the EXACT full URL provided to you character-for-character. NEVER shorten, truncate, or modify a URL. Every URL includes the full address with province and postal code (e.g. %2C-ontario-n2a-0l9). If you cut off any part of the URL, it will be a broken link. Always include the COMPLETE URL exactly as given.
 """
 
 GEMINI_MODEL = 'gemini-2.5-flash'
@@ -303,14 +304,14 @@ async def chat_endpoint(req: ChatRequest):
         if is_tenant_convo:
             properties, location, property_type = determine_properties(full_conversation)
             if properties and location and property_type:
-                context = "\n[SYSTEM: The user is a Tenant. Here are up to 2 matching available properties. Include each property's full URL link in your message:\n"
+                context = "\n[SYSTEM: The user is a Tenant. Here are up to 2 matching available properties. CRITICAL: You MUST copy each URL below EXACTLY and COMPLETELY — do NOT shorten or truncate any URL. Every character matters, including the postal code at the end:\n"
                 for p in properties:
                     price = f" | ${p.get('price', 'N/A')}/mo" if p.get('price') else ""
                     beds = f" | {p.get('beds', '')} bed" if p.get('beds') else ""
                     baths = f" | {p.get('baths', '')} bath" if p.get('baths') else ""
                     link = f" | URL: {p.get('url', '')}"
                     context += f"- {p['type']} at {p['address']}{price}{beds}{baths}{link}\n"
-                context += "Always output the exact URLs so the user can click them.]\n"
+                context += "You MUST output the COMPLETE URLs exactly as shown above, character-for-character. Do NOT remove the province or postal code from the URL.]\n"
 
         # Inject matching leased properties for Owners as reassurance
         if is_owner_convo and LEASED_PROPERTIES:
@@ -327,7 +328,8 @@ async def chat_endpoint(req: ChatRequest):
             if not matches:
                 matches = LEASED_PROPERTIES[:3]
             context += "\n[SYSTEM: The user is an Owner. After collecting their info and assuring them the team will follow up, "
-            context += "show these examples of similar properties we have successfully leased to build their confidence. Include the URLs:\n"
+            context += "show these examples of similar properties we have successfully leased to build their confidence. "
+            context += "CRITICAL: You MUST copy each URL below EXACTLY and COMPLETELY — do NOT shorten or truncate any URL. Every character matters, including the postal code at the end:\n"
             for lp in matches:
                 context += f"- {lp['property_type']} at {lp['address']} | {lp['price']}/mo | URL: {lp['url']}\n"
             context += "]\n"
