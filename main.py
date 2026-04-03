@@ -16,7 +16,7 @@ import openpyxl
 import properties_db
 
 
-def load_leased_properties(filepath: str = "Leased_properties_with_URLs.xlsx") -> list:
+def load_leased_properties(filepath: str = "Leased properties dataset Updated.xlsx") -> list:
     """Load previously leased properties from the Excel file."""
     leased = []
     try:
