@@ -10,6 +10,7 @@ from typing import List, Optional
 import os
 import json
 import traceback
+import time
 from datetime import datetime
 import openpyxl
 
@@ -358,8 +359,35 @@ async def chat_endpoint(req: ChatRequest):
                 context += f"- {lp.get('property_type', 'Property')} at {lp['address']}{price} | URL: {lp['url']}\n"
             context += "You MUST output the prices, property types and COMPLETE URLs exactly as shown above.]\n"
 
-        response = chat.send_message(last_msg + context)
-        response_text = response.text
+        # Retry on 503 with exponential backoff
+        max_retries = 3
+        response_text = None
+        for attempt in range(max_retries):
+            try:
+                response = chat.send_message(last_msg + context)
+                response_text = response.text
+                break
+            except Exception as api_err:
+                err_str = str(api_err)
+                if "503" in err_str or "UNAVAILABLE" in err_str:
+                    if attempt < max_retries - 1:
+                        wait_secs = 2 ** attempt  # 1s, 2s, 4s
+                        print(f"Gemini 503 on attempt {attempt + 1}, retrying in {wait_secs}s...")
+                        time.sleep(wait_secs)
+                        continue
+                    else:
+                        print("Gemini 503 persisted after all retries.")
+                        return {
+                            "response": "I'm so sorry — I'm experiencing a brief technical hiccup right now. "
+                                        "Please try sending your message again in a moment. I'll be right with you!"
+                        }
+                else:
+                    raise
+
+        if response_text is None:
+            return {
+                "response": "I'm so sorry — something went wrong on my end. Please try again in a moment!"
+            }
 
         # Parse and save JSON payload if present
         if "```json" in response_text:
