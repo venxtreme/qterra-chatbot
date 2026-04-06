@@ -269,10 +269,20 @@ def determine_properties(messages_content: str, properties_list: list):
     results = properties_list
     if location:
         results = [p for p in results if location.lower() in p['address'].lower()]
+        
+    requested_type_found = True
     if property_type:
-        results = [p for p in results if property_type.lower() in p['type'].lower()]
-    
-    return results[-3:], location, property_type
+        type_results = [p for p in results if property_type.lower() in p['type'].lower()]
+        if type_results:
+            results = type_results
+        elif location and results:
+            # Type not found in this region, but we have other properties in this region
+            requested_type_found = False
+        else:
+            results = type_results
+
+    # Pass requested_type_found up so prompt can adapt
+    return results[-3:], location, property_type, requested_type_found
 
 
 @api_router.post("/chat")
@@ -309,9 +319,12 @@ async def chat_endpoint(req: ChatRequest):
 
         # Inject matching available properties for Tenants
         if is_tenant_convo:
-            properties, location, property_type = determine_properties(full_conversation, SUGGESTIONS['available'])
+            properties, location, property_type, type_found = determine_properties(full_conversation, SUGGESTIONS['available'])
             if properties and location and property_type:
-                context = "\n[SYSTEM: The user is a Tenant. Here are up to 2 matching available properties from our suggestions portfolio. CRITICAL: You MUST copy each URL below EXACTLY and COMPLETELY — do NOT shorten or truncate any URL. Every character matters, including the postal code at the end:\n"
+                context = "\n[SYSTEM: The user is a Tenant."
+                if not type_found:
+                    context += f" We do NOT have their requested property type ({property_type}) in {location}. You MUST gently inform them that we don't have that specific type available there right now, but suggest the following alternative property types we DO have in the same region. NEVER suggest properties from out of the region."
+                context += " Here are up to 2 matching available properties from our suggestions portfolio. CRITICAL: You MUST copy each URL below EXACTLY and COMPLETELY — do NOT shorten or truncate any URL. Every character matters, including the postal code at the end:\n"
                 for p in properties:
                     price = f" | ${p.get('price', 'N/A')}/mo" if p.get('price') else ""
                     beds = f" | {p.get('beds', '')} bed" if p.get('beds') else ""
@@ -322,7 +335,7 @@ async def chat_endpoint(req: ChatRequest):
 
         # Inject matching leased properties for Owners as reassurance
         if is_owner_convo and SUGGESTIONS['leased']:
-            _, location, property_type = determine_properties(full_conversation, SUGGESTIONS['leased'])
+            _, location, property_type, type_found = determine_properties(full_conversation, SUGGESTIONS['leased'])
             matches = []
             for lp in SUGGESTIONS['leased']:
                 loc_match = location and location.lower() in lp["address"].lower()
@@ -334,8 +347,11 @@ async def chat_endpoint(req: ChatRequest):
             # Fall back to first 3 if no specific match
             if not matches:
                 matches = SUGGESTIONS['leased'][:3]
+            
             context += "\n[SYSTEM: The user is an Owner. After collecting their info and assuring them the team will follow up, "
-            context += "show these examples of similar properties we have successfully leased to build their confidence. "
+            if not type_found and location and property_type:
+                context += f"gently inform them that while we don't have exactly a {property_type} leased in {location} right now in our immediate examples, we can still serve them perfectly. Offer these alternative recently leased properties in their region. NEVER suggest properties from outside their region. "
+            context += "Show these examples of similar properties we have successfully leased to build their confidence. "
             context += "CRITICAL: You MUST copy each URL below EXACTLY and COMPLETELY — do NOT shorten or truncate any URL. Every character matters, including the postal code at the end:\n"
             for lp in matches:
                 price = f" | ${lp.get('price', 'N/A')}/mo" if lp.get('price') else ""
