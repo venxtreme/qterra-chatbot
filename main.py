@@ -13,32 +13,34 @@ import traceback
 from datetime import datetime
 import openpyxl
 
-import properties_db
-
-
-def load_leased_properties(filepath: str = "Leased properties dataset Updated.xlsx") -> list:
-    """Load previously leased properties from the Excel file."""
+def load_suggestions(filepath: str = "Suggestions v2.xlsx") -> dict:
+    """Load properties from the Suggestions Excel file."""
+    available = []
     leased = []
     try:
         wb = openpyxl.load_workbook(filepath)
         ws = wb.active
-        headers = [cell.value for cell in ws[1]]
+        # Columns: ['URL', 'Address', 'Status', 'Property Type ', 'Price']
         for row in ws.iter_rows(min_row=2, values_only=True):
             if any(row):
-                leased.append({
-                    "address": row[0] if len(row) > 0 and row[0] else "",
-                    "price": row[1] if len(row) > 1 and row[1] else "",
+                item = {
+                    "url": row[0] if len(row) > 0 and row[0] else "",
+                    "address": row[1] if len(row) > 1 and row[1] else "",
                     "status": row[2] if len(row) > 2 and row[2] else "",
                     "property_type": row[3] if len(row) > 3 and row[3] else "",
-                    "url": row[4] if len(row) > 4 and row[4] else "",
-                })
+                    "price": row[4] if len(row) > 4 and row[4] else "",
+                    "type": row[3] if len(row) > 3 and row[3] else "" # alias for type matching
+                }
+                if str(item["status"]).strip().upper() == "LEASED!":
+                    leased.append(item)
+                else:
+                    available.append(item)
     except Exception as e:
-        print(f"WARNING: Could not load leased properties: {e}")
-    return leased
+        print(f"WARNING: Could not load suggestions: {e}")
+    return {"available": available, "leased": leased}
 
-
-LEASED_PROPERTIES = load_leased_properties()
-print(f"Loaded {len(LEASED_PROPERTIES)} leased properties for owner assurance.")
+SUGGESTIONS = load_suggestions()
+print(f"Loaded {len(SUGGESTIONS['available'])} available and {len(SUGGESTIONS['leased'])} leased properties.")
 
 def load_env():
     """Load .env file for local development. Skipped silently in production."""
@@ -232,7 +234,7 @@ IMPORTANT RULES:
 GEMINI_MODEL = 'gemini-2.5-flash'
 
 
-def determine_properties(messages_content: str):
+def determine_properties(messages_content: str, properties_list: list):
     """Extract location and property type from conversation to query the database."""
     location = None
     property_type = None
@@ -249,7 +251,7 @@ def determine_properties(messages_content: str):
     ]
     types = [
         "condo", "basement", "house", "detached", "townhouse", "semi-detached",
-        "apartment", "multi-plex", "upper level", "main floor", "stacked townhouse"
+        "apartment", "multi-plex", "upper level", "main floor", "stacked townhouse", "semi-detached house"
     ]
 
     lower_content = messages_content.lower()
@@ -264,7 +266,13 @@ def determine_properties(messages_content: str):
             property_type = t
             break
 
-    return properties_db.search_properties(location=location, property_type=property_type), location, property_type
+    results = properties_list
+    if location:
+        results = [p for p in results if location.lower() in p['address'].lower()]
+    if property_type:
+        results = [p for p in results if property_type.lower() in p['type'].lower()]
+    
+    return results[-3:], location, property_type
 
 
 @api_router.post("/chat")
@@ -301,22 +309,22 @@ async def chat_endpoint(req: ChatRequest):
 
         # Inject matching available properties for Tenants
         if is_tenant_convo:
-            properties, location, property_type = determine_properties(full_conversation)
+            properties, location, property_type = determine_properties(full_conversation, SUGGESTIONS['available'])
             if properties and location and property_type:
-                context = "\n[SYSTEM: The user is a Tenant. Here are up to 2 matching available properties. CRITICAL: You MUST copy each URL below EXACTLY and COMPLETELY — do NOT shorten or truncate any URL. Every character matters, including the postal code at the end:\n"
+                context = "\n[SYSTEM: The user is a Tenant. Here are up to 2 matching available properties from our suggestions portfolio. CRITICAL: You MUST copy each URL below EXACTLY and COMPLETELY — do NOT shorten or truncate any URL. Every character matters, including the postal code at the end:\n"
                 for p in properties:
                     price = f" | ${p.get('price', 'N/A')}/mo" if p.get('price') else ""
                     beds = f" | {p.get('beds', '')} bed" if p.get('beds') else ""
                     baths = f" | {p.get('baths', '')} bath" if p.get('baths') else ""
                     link = f" | URL: {p.get('url', '')}"
-                    context += f"- {p['type']} at {p['address']}{price}{beds}{baths}{link}\n"
-                context += "You MUST output the COMPLETE URLs exactly as shown above, character-for-character. Do NOT remove the province or postal code from the URL.]\n"
+                    context += f"- {p.get('property_type', 'Property')} at {p['address']}{price}{beds}{baths}{link}\n"
+                context += "You MUST output the prices, property types and COMPLETE URLs exactly as shown above, character-for-character. Do NOT remove the province or postal code from the URL.]\n"
 
         # Inject matching leased properties for Owners as reassurance
-        if is_owner_convo and LEASED_PROPERTIES:
-            _, location, property_type = determine_properties(full_conversation)
+        if is_owner_convo and SUGGESTIONS['leased']:
+            _, location, property_type = determine_properties(full_conversation, SUGGESTIONS['leased'])
             matches = []
-            for lp in LEASED_PROPERTIES:
+            for lp in SUGGESTIONS['leased']:
                 loc_match = location and location.lower() in lp["address"].lower()
                 type_match = property_type and property_type.lower() in lp["property_type"].lower()
                 if loc_match or type_match:
@@ -325,13 +333,14 @@ async def chat_endpoint(req: ChatRequest):
                     break
             # Fall back to first 3 if no specific match
             if not matches:
-                matches = LEASED_PROPERTIES[:3]
+                matches = SUGGESTIONS['leased'][:3]
             context += "\n[SYSTEM: The user is an Owner. After collecting their info and assuring them the team will follow up, "
             context += "show these examples of similar properties we have successfully leased to build their confidence. "
             context += "CRITICAL: You MUST copy each URL below EXACTLY and COMPLETELY — do NOT shorten or truncate any URL. Every character matters, including the postal code at the end:\n"
             for lp in matches:
-                context += f"- {lp['property_type']} at {lp['address']} | {lp['price']}/mo | URL: {lp['url']}\n"
-            context += "]\n"
+                price = f" | ${lp.get('price', 'N/A')}/mo" if lp.get('price') else ""
+                context += f"- {lp.get('property_type', 'Property')} at {lp['address']}{price} | URL: {lp['url']}\n"
+            context += "You MUST output the prices, property types and COMPLETE URLs exactly as shown above.]\n"
 
         response = chat.send_message(last_msg + context)
         response_text = response.text
