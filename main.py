@@ -15,33 +15,44 @@ from datetime import datetime
 import openpyxl
 
 def load_suggestions(filepath: str = "Suggestions v2.xlsx") -> dict:
-    """Load properties from the Suggestions Excel file."""
+    """Load properties from the Suggestions Excel file.
+    Expected columns: Field1, URL, Address, Property Type, Price, Status
+
+    Status values:
+      'For Lease'  -> available properties, shown to tenants
+      'LEASED !'   -> successfully leased, shown to owners as track record examples
+    """
     available = []
     leased = []
     try:
         wb = openpyxl.load_workbook(filepath)
         ws = wb.active
-        # Columns: ['URL', 'Address', 'Status', 'Property Type ', 'Price']
+        # Columns: ['Field1'(0), 'URL'(1), 'Address'(2), 'Property Type'(3), 'Price'(4), 'Status'(5)]
         for row in ws.iter_rows(min_row=2, values_only=True):
-            if any(row):
-                item = {
-                    "url": row[0] if len(row) > 0 and row[0] else "",
-                    "address": row[1] if len(row) > 1 and row[1] else "",
-                    "status": row[2] if len(row) > 2 and row[2] else "",
-                    "property_type": row[3] if len(row) > 3 and row[3] else "",
-                    "price": row[4] if len(row) > 4 and row[4] else "",
-                    "type": row[3] if len(row) > 3 and row[3] else "" # alias for type matching
-                }
-                if str(item["status"]).strip().upper() == "LEASED!":
-                    leased.append(item)
-                else:
-                    available.append(item)
+            if not any(row):
+                continue
+            raw_status = str(row[5]).strip() if len(row) > 5 and row[5] else ""
+            status_upper = raw_status.replace(" ", "").upper()  # normalize: remove spaces, uppercase
+            item = {
+                "url": row[1] if len(row) > 1 and row[1] else "",
+                "address": row[2] if len(row) > 2 and row[2] else "",
+                "property_type": row[3] if len(row) > 3 and row[3] else "",
+                "type": row[3] if len(row) > 3 and row[3] else "",  # alias for type matching
+                "price": row[4] if len(row) > 4 and row[4] else "",
+                "status": raw_status,
+            }
+            # "FOR LEASE" → available for Tenant flow
+            # "LEASED!" / "LEASED !" → shown to Owners as successful leasing examples
+            if "LEASED" in status_upper:
+                leased.append(item)
+            else:
+                available.append(item)
     except Exception as e:
         print(f"WARNING: Could not load suggestions: {e}")
     return {"available": available, "leased": leased}
 
 SUGGESTIONS = load_suggestions()
-print(f"Loaded {len(SUGGESTIONS['available'])} available and {len(SUGGESTIONS['leased'])} leased properties.")
+print(f"Loaded {len(SUGGESTIONS['available'])} available and {len(SUGGESTIONS['leased'])} leased properties from Suggestions v2.")
 
 def load_env():
     """Load .env file for local development. Skipped silently in production."""
