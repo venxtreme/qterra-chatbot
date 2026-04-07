@@ -269,12 +269,20 @@ def determine_properties(messages_content: str, properties_list: list):
         "markham", "vaughan", "newmarket", "north york", "york", "concord",
         "woodbridge", "welland", "niagara falls", "st. catharines", "kingston",
         "stoney creek", "waterdown", "east york", "ridgetown", "king", "mono",
-        "east gwillimbury", "innisfil beach", "whitchurch-stouffville"
+        "east gwillimbury", "innisfil beach", "whitchurch-stouffville", "lefroy"
     ]
-    types = [
-        "condo", "basement", "house", "detached", "townhouse", "semi-detached",
-        "apartment", "multi-plex", "upper level", "main floor", "stacked townhouse", "semi-detached house"
-    ]
+
+    # Category mapping: user keyword -> list of DB property types that belong to that category
+    type_categories = {
+        "house": ["multi-plex", "semi-detached house", "detached house"],
+        "townhouse": ["condo-townhouse", "stacked townhouse", "freehold townhouse"],
+        "basement": ["basement apartment"],
+        "condo": ["main floor", "upper level", "apartment", "condo"],
+        "apartment": ["main floor", "upper level", "apartment", "condo"],
+    }
+
+    # Keywords to detect in conversation (order matters — more specific first)
+    type_keywords = ["townhouse", "basement", "apartment", "condo", "house"]
 
     lower_content = messages_content.lower()
 
@@ -283,7 +291,7 @@ def determine_properties(messages_content: str, properties_list: list):
             location = c
             break
 
-    for t in types:
+    for t in type_keywords:
         if t in lower_content:
             property_type = t
             break
@@ -294,7 +302,9 @@ def determine_properties(messages_content: str, properties_list: list):
         
     requested_type_found = True
     if property_type:
-        type_results = [p for p in results if property_type.lower() in p['type'].lower()]
+        # Get all DB types that fall under the user's requested category
+        db_types = type_categories.get(property_type, [property_type])
+        type_results = [p for p in results if any(dt in p['type'].lower() for dt in db_types)]
         if type_results:
             results = type_results
         elif location and results:
@@ -361,10 +371,20 @@ async def chat_endpoint(req: ChatRequest):
             matches = []
 
             if location:
+                # Category mapping for type matching
+                type_categories = {
+                    "house": ["multi-plex", "semi-detached house", "detached house"],
+                    "townhouse": ["condo-townhouse", "stacked townhouse", "freehold townhouse"],
+                    "basement": ["basement apartment"],
+                    "condo": ["main floor", "upper level", "apartment", "condo"],
+                    "apartment": ["main floor", "upper level", "apartment", "condo"],
+                }
+                db_types = type_categories.get(property_type, [property_type]) if property_type else []
+
                 # Step 1: Try location + type match (both)
                 for lp in SUGGESTIONS['leased']:
                     loc_match = location.lower() in lp["address"].lower()
-                    type_match = property_type and property_type.lower() in lp["property_type"].lower()
+                    type_match = property_type and any(dt in lp["property_type"].lower() for dt in db_types)
                     if loc_match and (type_match or not property_type):
                         matches.append(lp)
                     if len(matches) >= 3:
