@@ -359,17 +359,31 @@ async def chat_endpoint(req: ChatRequest):
         if is_owner_convo and SUGGESTIONS['leased']:
             _, location, property_type, type_found = determine_properties(full_conversation, SUGGESTIONS['leased'])
             matches = []
-            for lp in SUGGESTIONS['leased']:
-                loc_match = location and location.lower() in lp["address"].lower()
-                type_match = property_type and property_type.lower() in lp["property_type"].lower()
-                if loc_match or type_match:
-                    matches.append(lp)
-                if len(matches) >= 3:
-                    break
-            # Fall back to first 3 if no specific match
+
+            if location:
+                # Step 1: Try location + type match (both)
+                for lp in SUGGESTIONS['leased']:
+                    loc_match = location.lower() in lp["address"].lower()
+                    type_match = property_type and property_type.lower() in lp["property_type"].lower()
+                    if loc_match and (type_match or not property_type):
+                        matches.append(lp)
+                    if len(matches) >= 3:
+                        break
+
+                # Step 2: If not enough, relax to any property in that location
+                if len(matches) < 3:
+                    for lp in SUGGESTIONS['leased']:
+                        if lp in matches:
+                            continue
+                        if location.lower() in lp["address"].lower():
+                            matches.append(lp)
+                        if len(matches) >= 3:
+                            break
+
+            # Step 3: Only fall back to any leased property if NO location was detected
             if not matches:
                 matches = SUGGESTIONS['leased'][:3]
-            
+
             context += "\n[SYSTEM: The user is an Owner. After collecting their info and assuring them the team will follow up, "
             if not type_found and location and property_type:
                 context += f"gently inform them that while we don't have exactly a {property_type} leased in {location} right now in our immediate examples, we can still serve them perfectly. Offer these alternative recently leased properties in their region. NEVER suggest properties from outside their region. "
