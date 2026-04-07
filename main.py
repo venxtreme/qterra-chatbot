@@ -9,10 +9,15 @@ from oauth2client.service_account import ServiceAccountCredentials
 from typing import List, Optional
 import os
 import json
-import traceback
-import time
+import asyncio
+import logging
+import tempfile
 from datetime import datetime
 import openpyxl
+
+logger = logging.getLogger("qterra-chatbot")
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 def load_suggestions(filepath: str = "Suggestions v2.xlsx") -> dict:
     """Load properties from the Suggestions Excel file.
@@ -48,11 +53,15 @@ def load_suggestions(filepath: str = "Suggestions v2.xlsx") -> dict:
             else:
                 available.append(item)
     except Exception as e:
-        print(f"WARNING: Could not load suggestions: {e}")
+        logger.warning("Could not load suggestions: %s", e)
     return {"available": available, "leased": leased}
 
 SUGGESTIONS = load_suggestions()
-print(f"Loaded {len(SUGGESTIONS['available'])} available and {len(SUGGESTIONS['leased'])} leased properties from Suggestions v2.")
+logger.info(
+    "Loaded %s available and %s leased properties from Suggestions v2.",
+    len(SUGGESTIONS["available"]),
+    len(SUGGESTIONS["leased"]),
+)
 
 def load_env():
     """Load .env file for local development. Skipped silently in production."""
@@ -70,10 +79,12 @@ load_env()
 app = FastAPI()
 api_router = APIRouter()
 
+cors_origins = os.environ.get("CORS_ALLOW_ORIGINS", "*")
+allow_origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=allow_origins or ["*"],
+    allow_credentials=False if allow_origins == ["*"] else True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -88,12 +99,16 @@ scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/au
 # Support credentials from file (local) or env var (production/Railway)
 google_creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
 if google_creds_json:
-    import tempfile
+    tmp_path = None
     creds_data = json.loads(google_creds_json)
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as tmp:
         json.dump(creds_data, tmp)
         tmp_path = tmp.name
-    creds = ServiceAccountCredentials.from_json_keyfile_name(tmp_path, scope)
+    try:
+        creds = ServiceAccountCredentials.from_json_keyfile_name(tmp_path, scope)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
 else:
     creds = ServiceAccountCredentials.from_json_keyfile_name('google_credentials.json', scope)
 
@@ -103,9 +118,9 @@ sheet = None
 
 try:
     sheet = client.open_by_key(spreadsheet_id).sheet1
-    print("Successfully connected to Google Sheet")
+    logger.info("Successfully connected to Google Sheet")
 except Exception as e:
-    print(f"WARNING: Could not connect to Google Sheet. Error: {e}")
+    logger.warning("Could not connect to Google Sheet. Error: %s", e)
 
 
 class Message(BaseModel):
@@ -320,6 +335,9 @@ def determine_properties(messages_content: str, properties_list: list):
 @api_router.post("/chat")
 async def chat_endpoint(req: ChatRequest):
     try:
+        if not req.messages:
+            raise HTTPException(status_code=400, detail="messages must not be empty")
+
         history = []
         full_conversation = ""
         for m in req.messages[:-1]:
@@ -419,7 +437,7 @@ async def chat_endpoint(req: ChatRequest):
         response_text = None
         for attempt in range(max_retries):
             try:
-                response = chat.send_message(last_msg + context)
+                response = await asyncio.to_thread(chat.send_message, last_msg + context)
                 response_text = response.text
                 break
             except Exception as api_err:
@@ -427,11 +445,15 @@ async def chat_endpoint(req: ChatRequest):
                 if "503" in err_str or "UNAVAILABLE" in err_str:
                     if attempt < max_retries - 1:
                         wait_secs = 2 ** attempt  # 1s, 2s, 4s
-                        print(f"Gemini 503 on attempt {attempt + 1}, retrying in {wait_secs}s...")
-                        time.sleep(wait_secs)
+                        logger.warning(
+                            "Gemini 503 on attempt %s, retrying in %ss...",
+                            attempt + 1,
+                            wait_secs,
+                        )
+                        await asyncio.sleep(wait_secs)
                         continue
                     else:
-                        print("Gemini 503 persisted after all retries.")
+                        logger.error("Gemini 503 persisted after all retries.")
                         return {
                             "response": "I'm so sorry — I'm experiencing a brief technical hiccup right now. "
                                         "Please try sending your message again in a moment. I'll be right with you!"
@@ -463,20 +485,32 @@ async def chat_endpoint(req: ChatRequest):
                         data.get("num_occupants", ""),
                         data.get("summary", ""),
                     ]
-                    sheet.append_row(row)
+                    await asyncio.to_thread(sheet.append_row, row)
                 else:
-                    print(f"Lead captured (Sheets not connected): {data}")
+                    redacted_data = {
+                        "name_present": bool(data.get("name")),
+                        "role": data.get("role", ""),
+                        "location": data.get("location", ""),
+                        "property_type": data.get("property_type", ""),
+                        "phone_present": bool(data.get("phone")),
+                    }
+                    logger.info("Lead captured (Sheets not connected): %s", redacted_data)
             except Exception as e:
-                print(f"Failed to process JSON or save to Sheets: {e}")
+                logger.exception("Failed to process JSON or save to Sheets: %s", e)
 
             # Strip JSON from response shown to user
             response_text = response_text.split("```json")[0].strip()
 
         return {"response": response_text}
 
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unhandled error in /api/chat")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error. Please try again shortly.",
+        )
 
 
 app.include_router(api_router, prefix="/api")

@@ -1,6 +1,7 @@
 const chatStream = document.getElementById('chat-stream');
 const chatInput = document.getElementById('chat-input');
 const sendBtn = document.getElementById('send-btn');
+const REQUEST_TIMEOUT_MS = 20000;
 
 // State
 let isTyping = false;
@@ -15,18 +16,52 @@ function init() {
     });
 
     sendBtn.addEventListener('click', handleSend);
-    chatInput.addEventListener('keypress', (e) => {
+    chatInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') handleSend();
     });
 }
 
-// Convert links in text to actual HTML anchors
-function formatText(text) {
-    // Regex to match URLs
+function normalizeMessageText(text) {
+    return typeof text === 'string' ? text : '';
+}
+
+// Safely render text content and turn URLs into clickable anchors without innerHTML.
+function buildMessageParagraph(text) {
+    const paragraph = document.createElement('p');
+    const safeText = normalizeMessageText(text);
+    const lines = safeText.split('\n');
     const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return text.replace(urlRegex, function(url) {
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+
+    lines.forEach((line, lineIndex) => {
+        let lastIndex = 0;
+        let match;
+        while ((match = urlRegex.exec(line)) !== null) {
+            const url = match[0];
+            const matchStart = match.index;
+
+            if (matchStart > lastIndex) {
+                paragraph.appendChild(document.createTextNode(line.slice(lastIndex, matchStart)));
+            }
+
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.target = '_blank';
+            anchor.rel = 'noopener noreferrer';
+            anchor.textContent = url;
+            paragraph.appendChild(anchor);
+            lastIndex = matchStart + url.length;
+        }
+
+        if (lastIndex < line.length) {
+            paragraph.appendChild(document.createTextNode(line.slice(lastIndex)));
+        }
+
+        if (lineIndex < lines.length - 1) {
+            paragraph.appendChild(document.createElement('br'));
+        }
     });
+
+    return paragraph;
 }
 
 function scrollToBottom() {
@@ -36,20 +71,19 @@ function scrollToBottom() {
 function addMessage(text, isUser = false) {
     const wrapper = document.createElement('div');
     wrapper.className = `message-wrapper ${isUser ? 'user-message' : 'ai-message'}`;
-    
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
-    // Format text and convert links
-    const formattedText = formatText(text)
-        .replace(/\n/g, '<br/>'); // Handle line breaks
-    
-    wrapper.innerHTML = `
-        <div class="message-bubble">
-            <p>${formattedText}</p>
-        </div>
-        <span class="message-time">${time}</span>
-    `;
-    
+
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    bubble.appendChild(buildMessageParagraph(text));
+
+    const timeElement = document.createElement('span');
+    timeElement.className = 'message-time';
+    timeElement.textContent = time;
+
+    wrapper.appendChild(bubble);
+    wrapper.appendChild(timeElement);
+
     chatStream.appendChild(wrapper);
     scrollToBottom();
 }
@@ -88,20 +122,38 @@ async function handleSend() {
     isTyping = true;
     showTypingIndicator();
     
+    let timeoutId = null;
     try {
+        const controller = new AbortController();
+        timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
         // Send to FastAPI
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ messages: messageHistory })
+            body: JSON.stringify({ messages: messageHistory }),
+            signal: controller.signal
         });
-        
-        if (!response.ok) throw new Error('API Error');
-        
-        const data = await response.json();
-        const aiText = data.response;
+        clearTimeout(timeoutId);
+        timeoutId = null;
+
+        let data = null;
+        try {
+            data = await response.json();
+        } catch {
+            data = {};
+        }
+
+        if (!response.ok) {
+            const apiDetail = typeof data.detail === 'string' ? data.detail : 'API Error';
+            throw new Error(apiDetail);
+        }
+
+        const aiText = typeof data.response === 'string'
+            ? data.response
+            : "Sorry, I couldn't read the server response. Please try again.";
         
         hideTypingIndicator();
         addMessage(aiText, false);
@@ -110,8 +162,17 @@ async function handleSend() {
     } catch (error) {
         console.error(error);
         hideTypingIndicator();
-        addMessage("Sorry, I'm having trouble connecting to the server. Please try again later.", false);
+        const isTimeout = error && error.name === 'AbortError';
+        addMessage(
+            isTimeout
+                ? "Sorry, the request timed out. Please try again."
+                : "Sorry, I'm having trouble connecting to the server. Please try again later.",
+            false
+        );
     } finally {
+        if (timeoutId !== null) {
+            clearTimeout(timeoutId);
+        }
         isTyping = false;
         chatInput.focus();
     }
