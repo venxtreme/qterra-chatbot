@@ -176,7 +176,7 @@ AFTER collecting all 5 items:
 STEP 3B — OWNER FLOW
 ============================
 After Name + Phone, collect ONE AT A TIME:
-1. Location/address of their property.
+1. City or general area where their property is located. Do NOT ask for a full street address — city or neighbourhood is enough.
 2. Type of property.
 3. When they'd like tenants to move in (move-in date / availability date).
 
