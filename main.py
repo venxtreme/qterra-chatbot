@@ -171,6 +171,7 @@ PHONE NUMBER VALIDATION RULES (apply strictly):
 - REJECT numbers where area code or exchange starts with 0 or 1 (e.g. 123-456-7890 or 011-555-1234 are INVALID)
 - If invalid, kindly say something like: "Hmm, that doesn't look like a valid phone number. Could you double-check and share it again? It should be a 10-digit number like 647-555-9919."
 - Only proceed once you have a valid phone number.
+- When the phone number IS valid, do NOT tell the user it is "valid" or mention validation at all. Just warmly acknowledge (e.g. "Thanks, Ali!") and move on to the next step.
 
 ============================
 STEP 2B — CONTACT PREFERENCE (ALL ROLES)
