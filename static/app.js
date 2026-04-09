@@ -86,6 +86,7 @@ function addMessage(text, isUser = false) {
 
     chatStream.appendChild(wrapper);
     scrollToBottom();
+    return wrapper;
 }
 
 function showTypingIndicator() {
@@ -107,6 +108,47 @@ function hideTypingIndicator() {
         indicator.className = 'typing-indicator fade-out';
         setTimeout(() => indicator.remove(), 300);
     }
+}
+
+function addMenuOptions(options) {
+    // Remove any existing menu
+    const existingMenu = document.getElementById('contact-menu');
+    if (existingMenu) existingMenu.remove();
+
+    const menuContainer = document.createElement('div');
+    menuContainer.className = 'menu-options-container';
+    menuContainer.id = 'contact-menu';
+
+    options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = 'menu-option-btn';
+        btn.textContent = opt.label;
+        btn.addEventListener('click', () => handleMenuClick(opt.value, menuContainer));
+        menuContainer.appendChild(btn);
+    });
+
+    chatStream.appendChild(menuContainer);
+    scrollToBottom();
+}
+
+function handleMenuClick(value, menuContainer) {
+    // Disable all buttons to prevent double-click
+    const buttons = menuContainer.querySelectorAll('.menu-option-btn');
+    buttons.forEach(btn => {
+        btn.disabled = true;
+        btn.classList.add('menu-option-disabled');
+    });
+
+    // Highlight selected button
+    buttons.forEach(btn => {
+        if (btn.textContent.includes(value) || btn.textContent.toLowerCase().includes(value.toLowerCase())) {
+            btn.classList.add('menu-option-selected');
+        }
+    });
+
+    // Send the selection as a user message
+    chatInput.value = value;
+    handleSend();
 }
 
 async function handleSend() {
@@ -158,6 +200,11 @@ async function handleSend() {
         hideTypingIndicator();
         addMessage(aiText, false);
         messageHistory.push({ role: "assistant", content: aiText });
+
+        // Render menu options if present
+        if (data.menu_options && Array.isArray(data.menu_options)) {
+            addMenuOptions(data.menu_options);
+        }
         
     } catch (error) {
         console.error(error);

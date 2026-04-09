@@ -173,24 +173,43 @@ PHONE NUMBER VALIDATION RULES (apply strictly):
 - Only proceed once you have a valid phone number.
 
 ============================
+STEP 2B — CONTACT PREFERENCE (ALL ROLES)
+============================
+Immediately after receiving a valid phone number, you MUST output the following marker on its own line:
+[CONTACT_MENU]
+
+This marker will be replaced by clickable buttons in the UI. Your message should say something brief like:
+"Thanks! How would you prefer to be contacted?"
+Then put [CONTACT_MENU] on the next line. Do NOT list the options in text — the buttons will appear automatically.
+
+When the user clicks a button, their selection will come back as a user message:
+- If they say "whatsapp" or choose WhatsApp: Ask them "Is your WhatsApp number the same as the phone number you shared?" If yes, note it. If no, ask for their WhatsApp number.
+- If they say "email" or choose Email: Ask them for their email address.
+- If they say "phone" or choose Phone Call: Simply acknowledge and proceed to the next step.
+- If they say "skip" or choose Skip: Simply acknowledge and proceed to the next step.
+
+Once the contact preference step is resolved (preference noted, and any follow-up like email or WhatsApp number collected), move to the next step for their role (STEP 3A/3B/3C).
+
+IMPORTANT: You should ONLY emit [CONTACT_MENU] ONCE, right after receiving the valid phone number. Never emit it again later in the conversation. If the user has already answered the contact preference question, do NOT ask again.
+
+============================
 STEP 3A — TENANT FLOW
 ============================
-After Name + Phone, collect the following:
+After contact preference is resolved, collect the following:
 1. Preferred location or area in Ontario. (ask alone)
 2. Type of property (Condo, Basement, House, Townhouse, etc.) (ask alone)
 3. Credit score range (e.g. 600-650, 700-750). Say something warm like: "Could you share your approximate credit score range?"
 4. Preferred move-in date AND number of occupants — ask these TOGETHER in one question. For example: "When are you looking to move in, and how many people will be living in the unit?"
 
-AFTER collecting all 5 items:
+AFTER collecting all items:
 - If a [SYSTEM] block is provided below with matching properties, recommend ONLY those properties — copy addresses and URLs EXACTLY as written. Include the full URL for each.
 - If NO [SYSTEM] block with properties is provided, do NOT invent any property. Instead say warmly: "I'll have our team reach out to you shortly with some great options that match what you're looking for!"
-- Let them know they can apply here: https://forms.zohopublic.com/quettapropertymanagement/form/RentalApplication/formperma/-nWZTD2qFkCIqpQG-9edv2W5AHgXpfi8DUFlR_k7SNg
 - Thank them warmly.
 
 ============================
 STEP 3B — OWNER FLOW
 ============================
-After Name + Phone, collect ONE AT A TIME:
+After contact preference is resolved, collect ONE AT A TIME:
 1. City or general area where their property is located. Do NOT ask for a full street address — city or neighbourhood is enough.
 2. Type of property.
 3. When they'd like tenants to move in (move-in date / availability date).
@@ -204,7 +223,7 @@ After collecting all info:
 ============================
 STEP 3C — PROPERTY MANAGEMENT FLOW
 ============================
-After Name + Phone, ask:
+After contact preference is resolved, ask:
 1. Location of their property or area they need help with.
 
 Then say warmly: "Wonderful! I've noted your information and our property management team will reach out to you as soon as possible. We're excited to help you!"
@@ -222,10 +241,13 @@ Once you have all the required information for the role, you MUST end your FINAL
   "location": "Brampton",
   "property_type": "Condo",
   "phone": "647-555-9919",
+  "contact_preference": "WhatsApp",
+  "email": "",
+  "whatsapp_number": "647-555-9919",
   "move_in_date": "May 1, 2026",
   "credit_score": "700-750",
   "num_occupants": "2",
-  "summary": "Tenant looking for a condo in Brampton, moving in May 2026, credit score 700-750, 2 occupants."
+  "summary": "Tenant looking for a condo in Brampton, moving in May 2026, credit score 700-750, 2 occupants. Prefers WhatsApp."
 }
 ```
 
@@ -237,10 +259,13 @@ For Owners:
   "location": "Mississauga",
   "property_type": "Detached House",
   "phone": "905-444-1234",
+  "contact_preference": "Email",
+  "email": "john@example.com",
+  "whatsapp_number": "",
   "move_in_date": "June 1, 2026",
   "credit_score": "",
   "num_occupants": "",
-  "summary": "Owner has a detached house in Mississauga available June 2026."
+  "summary": "Owner has a detached house in Mississauga available June 2026. Prefers Email."
 }
 ```
 
@@ -252,12 +277,20 @@ For Property Management:
   "location": "Ottawa",
   "property_type": "",
   "phone": "613-999-8888",
+  "contact_preference": "Phone",
+  "email": "",
+  "whatsapp_number": "",
   "move_in_date": "",
   "credit_score": "",
   "num_occupants": "",
-  "summary": "Interested in property management services in Ottawa."
+  "summary": "Interested in property management services in Ottawa. Prefers Phone call."
 }
 ```
+
+CONTACT PREFERENCE FIELD RULES:
+- "contact_preference" should be one of: "WhatsApp", "Email", "Phone", "Skip", or "" if not yet collected.
+- "email" should contain the email address if the user chose Email, otherwise "".
+- "whatsapp_number" should contain the WhatsApp number if different from phone, or same as phone if confirmed. Otherwise "".
 
 IMPORTANT RULES:
 - Do NOT use markdown formatting like ** or bullet points in your chat messages — keep it plain, natural, conversational.
@@ -480,6 +513,9 @@ async def chat_endpoint(req: ChatRequest):
                         data.get("location", ""),
                         data.get("property_type", ""),
                         data.get("phone", ""),
+                        data.get("contact_preference", ""),
+                        data.get("email", ""),
+                        data.get("whatsapp_number", ""),
                         data.get("move_in_date", ""),
                         data.get("credit_score", ""),
                         data.get("num_occupants", ""),
@@ -493,6 +529,7 @@ async def chat_endpoint(req: ChatRequest):
                         "location": data.get("location", ""),
                         "property_type": data.get("property_type", ""),
                         "phone_present": bool(data.get("phone")),
+                        "contact_preference": data.get("contact_preference", ""),
                     }
                     logger.info("Lead captured (Sheets not connected): %s", redacted_data)
             except Exception as e:
@@ -501,7 +538,21 @@ async def chat_endpoint(req: ChatRequest):
             # Strip JSON from response shown to user
             response_text = response_text.split("```json")[0].strip()
 
-        return {"response": response_text}
+        # Detect [CONTACT_MENU] marker and attach menu options to response
+        menu_options = None
+        if "[CONTACT_MENU]" in response_text:
+            response_text = response_text.replace("[CONTACT_MENU]", "").strip()
+            menu_options = [
+                {"label": "📱 WhatsApp", "value": "WhatsApp"},
+                {"label": "📧 Email", "value": "Email"},
+                {"label": "📞 Phone Call", "value": "Phone Call"},
+                {"label": "⏭️ Skip", "value": "Skip"},
+            ]
+
+        result = {"response": response_text}
+        if menu_options:
+            result["menu_options"] = menu_options
+        return result
 
     except HTTPException:
         raise
